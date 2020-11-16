@@ -108,7 +108,7 @@ prompt = 'Input here: ';
 winstepsize = input(prompt);
 if length(winstepsize) == 1, winstepsize = winstepsize*ones(1,3); end
 
-winsize = winstepsize + [5,5,5];
+winsize = winstepsize + [6,6,6];
 
 % ==============================================
 % Initial guess method:
