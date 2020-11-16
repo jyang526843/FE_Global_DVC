@@ -17,14 +17,14 @@ close all; clear all; clc; clearvars -global
 fprintf('------------ Section 1 Start ------------ \n')
 setenv('MW_MINGW64_LOC','C:\TDM-GCC-64')
 mex -O ba_interp3.cpp; warning('off'); % dbstop if error 
-addpath('./func','./src','./plotFiles','./DVC_images','./plotFiles/export_fig-d966721','./func/regularizeNd');
+addpath('./func','./src','./plotFiles','./DVC_images','./func/regularizeNd');
 fprintf('------------ Section 1 Done ------------ \n \n')
 
 
 %% Section 2
 fprintf('------------ Section 2 Start ------------ \n')
 % ====== Read images ======
-filename = 'vol_str*.mat'; fileFolder = './DVC_images/';
+filename = 'vol_S*.mat'; fileFolder = './DVC_images/';
 try if isempty(fileFolder)~=1, cd(fileFolder); end; catch; end
 [file_name,Img,DVCpara] = ReadImage3(filename); 
 DVCpara.interpmethod = 'cubic';   % Grayscale interpolation scheme: choose from {'linear','cubic','spline','default'}
@@ -35,11 +35,17 @@ DVCpara.alpha = 1e2;              % Global-DVC gradient regularization coefficie
 % Comment: If you don't know the coefficient of the regularization term, please uncomment the line 
 % "% alphaList = [1e-3,1e-2,1e-1,1e0,1e1,1e2,1e3]*mean(DICpara.winstepsize);" in section 4.
 
+try if isempty(fileFolder)~=1, cd('../'); end; catch; end
+% ====== Uncomment the behind line and change the value you want ======
+% E.g.: gridRange.gridxRange = [352,696]; ... 
+% ====== Normalize images ======
+[ImgNormalized,DVCpara.gridRange] = funNormalizeImg3(Img,DVCpara.gridRange,'Normalize'); clear Img; % Clear original images to save space
+
 % ====== Initialize variable storage ======
 ResultDisp = cell(length(ImgNormalized)-1,1); 
 ResultDefGrad = cell(length(ImgNormalized)-1,1);
 ResultStrain = cell(length(ImgNormalized)-1,1);
-ResultFEMesh = cell(ceil((length(ImgNormalized)-1)/DICpara.ImgSeqIncUnit),1); % For incremental DIC mode
+ResultFEMesh = cell(ceil((length(ImgNormalized)-1)/DVCpara.ImgSeqIncUnit),1); % For incremental DIC mode
 ResultAlpha = cell(length(ImgNormalized)-1,1);
 ResultNormOfW = cell(length(ImgNormalized)-1,1);
 ResultTimeICGN = cell(length(ImgNormalized)-1,1);
@@ -97,8 +103,9 @@ for ImgSeqNum = 2:length(ImgNormalized)
         U0 = ResultDisp{ImgSeqNum-2}.U;
     end
     % ====== Spline interpolation images ======
-    % Df = funImgGradient3(Img{1},'stencil7'); Df.imgSize = size(Img{1}); % Compute image grayscale value gradients
-    Df = struct(); Df.imgSize = size(Img{1});
+    disp('--- Start to compute image gradients ---');
+    Df = funImgGradient3(Img{1},'stencil7'); Df.imgSize = size(Img{1}); % Compute image grayscale value gradients
+    disp('--- Computing image gradients done ---');
     % ====== Compute f(X)-g(x+u) ======
     % PlotImgDiff(x0,y0,u,v,fNormalized,gNormalized); % Img grayscale value residual
     fprintf('------------ Section 3 Done ------------ \n \n')
@@ -116,7 +123,7 @@ for ImgSeqNum = 2:length(ImgNormalized)
     % codes to tune the best value of the coefficient of the regularizer |grad u|^2):
     % 
     % %%%%% Uncomment the following line to tune the best value of alpha %%%%%%
-    % alphaList = [1e-3,1e-2,1e-1,1e0,1e1,1e2,1e3]*mean(DICpara.winstepsize);
+    alphaList = [1e-3,1e-2,1e-1,1e0,1e1,1e2]*mean(DVCpara.winstepsize);
     
     Err1List = zeros(length(alphaList),1); Err2List=Err1List; UList = cell(length(alphaList),1); FList=UList;
     
@@ -125,10 +132,12 @@ for ImgSeqNum = 2:length(ImgNormalized)
         
         tic; alpha = alphaList(alphaInd); 
         % Solve displacement U with each alpha
-        [U, normOfW, timeICGN] = funGlobalICGN3(DICmesh,Df,Img{1},Img{2},U0,alpha,DVCpara.tol,DVCpara.maxIter);
+        [U, normOfW, timeICGN] = funGlobalICGN3(DVCmesh,Df,Img{1},Img{2},U0,alpha,DVCpara.tol,DVCpara.maxIter);
         % Compute F deformation gradient with solved U
         DVCpara.GaussPtOrder = 2; [F,~,~] = funGlobal_NodalStrainAvg3(DVCmesh,U,DVCpara.GaussPtOrder);
         
+        UList{alphaInd} = U;
+        FList{alphaInd} = F;
         Err1List(alphaInd) = norm(U-U0,2);
         Err2List(alphaInd) = norm(F,2); 
           
@@ -149,7 +158,7 @@ for ImgSeqNum = 2:length(ImgNormalized)
     
     % ====== Re-run global DVC iterations with tuned alpha_best ======
     if abs(alpha_best - alpha) > abs(eps)
-        [U, normOfW, timeICGN] = funGlobalICGN3(DICmesh,Df,Img{1},Img{2},U0,alpha,DVCpara.tol,DVCpara.maxIter);
+        [U, normOfW, timeICGN] = funGlobalICGN3(DVCmesh,Df,Img{1},Img{2},U0,alpha,DVCpara.tol,DVCpara.maxIter);
         DVCpara.GaussPtOrder = 2; [F,~,~] = funGlobal_NodalStrainAvg3(DVCmesh,U,DVCpara.GaussPtOrder);
     end
     
@@ -311,7 +320,7 @@ fprintf('------------ Section 5 Done ------------ \n \n')
 
 
 %% Save data again including the computed strain 
-results_name = ['results_FE_globalDVC_st',num2str(DVCpara.winstepsize(1)),'_alpha',num2str(DICpara.alpha),'.mat'];
+results_name = ['results_FE_globalDVC_st',num2str(DVCpara.winstepsize(1)),'_alpha',num2str(DVCpara.alpha),'.mat'];
 save(results_name, 'file_name','DVCpara','DVCmesh','ResultDisp','ResultDefGrad','ResultStrain','ResultFEMesh', ...
      'ResultAlpha','ResultNormOfW','ResultTimeICGN');
 

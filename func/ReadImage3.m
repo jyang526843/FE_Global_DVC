@@ -95,18 +95,20 @@ end
 
 gridRange = struct('gridxRange',gridx,'gridyRange',gridy,'gridzRange',gridz);
 
-% Choose subset size
-fprintf('\n');
-fprintf('--- What is the subset size? --- \n');
-prompt = 'Input here: ';
-winsize = input(prompt);
-if length(winsize) == 1, winsize = winsize*ones(1,3); end
+% % Choose subset size
+% fprintf('\n');
+% fprintf('--- What is the winsize size? --- \n');
+% prompt = 'Input here: ';
+% winsize = input(prompt);
+% if length(winsize) == 1, winsize = winsize*ones(1,3); end
 
 % Choose subset size
-fprintf('--- What is the subset step? --- \n');
+fprintf('--- What is the finite element size? --- \n');
 prompt = 'Input here: ';
 winstepsize = input(prompt);
 if length(winstepsize) == 1, winstepsize = winstepsize*ones(1,3); end
+
+winsize = winstepsize + [5,5,5];
 
 % ==============================================
 % Initial guess method:
@@ -114,11 +116,11 @@ InitFFTMethod = funParaInput('InitFFTMethod');
 
 % ==============================================
 % Subproblem 2 solver: finite difference or finite element
-Subpb2FDOrFEM = funParaInput('Subpb2FDOrFEM'); % Subproblem 2 using finite difference or fem?
+% Subpb2FDOrFEM = funParaInput('Subpb2FDOrFEM'); % Subproblem 2 using finite difference or fem?
  
 % ==============================================
 % Parallel cluster #
-ClusterNo = funParaInput('ClusterNo'); % Assign parpool cluster No
+ClusterNo = 1;% ClusterNo = funParaInput('ClusterNo'); % Assign parpool cluster No
 
 % ==============================================
 % Deal with image sequence
@@ -179,7 +181,7 @@ end
 DVCpara.winsize = winsize;
 DVCpara.winstepsize = winstepsize;
 DVCpara.gridRange = gridRange;
-DVCpara.Subpb2FDOrFEM = Subpb2FDOrFEM;
+% DVCpara.Subpb2FDOrFEM = Subpb2FDOrFEM;
 DVCpara.ClusterNo = ClusterNo;
 DVCpara.ImgSize = size(Img{1});
 DVCpara.ImgSeqIncUnit = ImgSeqIncUnit;
