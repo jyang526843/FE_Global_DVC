@@ -259,10 +259,12 @@ for stepwithinwhile = 1:maxIter
     % ========= Solve FEM problem ===========
     W = A\b;
     
-    normW = norm(W)/sqrt(size(W,1))
+    normW = norm(W)/sqrt(size(W,1));
     normOfW(stepwithinwhile) = normW;
-    timeICGN(stepwithinwhile) = toc; toc
+    timeICGN(stepwithinwhile) = toc; 
     U = reshape(U,length(U),1); W = reshape(W,length(W),1);
+    
+    disp(['normW = ',num2str(normW),' at iter ',num2str(stepwithinwhile),'; time cost = ',num2str(toc),'s']);
     
     if stepwithinwhile == 1
         normWOld = normW*10;
