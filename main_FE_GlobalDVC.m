@@ -144,7 +144,7 @@ for ImgSeqNum = 2:length(ImgNormalized)
     end
     
     % ====== Tune the coefficient of |grad u| regularizer ======
-    ErrSumList = Err1List + 1*mean(DICpara.winstepsize)*Err2List;  % 10 is an empirical number
+    ErrSumList = Err1List + 1*mean(DVCpara.winstepsize)*Err2List;  % 10 is an empirical number
     [~,indexOfalpha] = min(ErrSumList); 
     
     try
@@ -153,7 +153,7 @@ for ImgSeqNum = 2:length(ImgNormalized)
     catch
         alpha_best = alphaList(indexOfalpha); 
     end
-    DICpara.alpha = alpha_best;
+    DVCpara.alpha = alpha_best;
     
     
     % ====== Re-run global DVC iterations with tuned alpha_best ======
