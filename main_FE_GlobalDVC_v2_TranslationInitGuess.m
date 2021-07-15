@@ -26,11 +26,11 @@ fprintf('------------ Section 2 Start ------------ \n')
 % ====== Read images ======
 filename = 'vol*.mat'; fileFolder = './images_StantonGodshall/'; %'./DVC_images/';
 try if isempty(fileFolder)~=1, cd(fileFolder); end; catch; end
-[file_name,Img,DVCpara] = ReadImage3(filename); 
+[file_name,Img,DVCpara] = ReadImage3_v2_zeroInitGuess(filename); 
 DVCpara.interpmethod = 'cubic';   % Grayscale interpolation scheme: choose from {'linear','cubic','spline','default'}
 DVCpara.displayIterOrNot = 0;     % Display Section 4 Subpb1 IC-GN convergence info
 DVCpara.maxIter = 100;            % Maximum IC-GN iterations in IC-GN iterations
-DVCpara.tol = 1e-3;               % Iteration stopping threshold
+DVCpara.tol = 1e-1;               % Iteration stopping threshold
 DVCpara.alpha = 1e2;              % Global-DVC gradient regularization coefficient 
 % Comment: If you don't know the coefficient of the regularization term, please uncomment the line 
 % "% alphaList = [1e-3,1e-2,1e-1,1e0,1e1,1e2,1e3]*mean(DICpara.winstepsize);" in section 4.
@@ -56,7 +56,7 @@ fprintf('------------ Section 2 Done ------------ \n \n');
 % Start each frame in an image sequence
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Img{1} = ImgNormalized{1}; % The first frame is reference 
-for ImgSeqNum = 2 %: length(ImgNormalized)
+for ImgSeqNum = 2 % : length(ImgNormalized)
      
     disp(['Current image frame #: ', num2str(ImgSeqNum),'/',num2str(length(ImgNormalized))]); 
     
@@ -72,17 +72,28 @@ for ImgSeqNum = 2 %: length(ImgNormalized)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     if ImgSeqNum==2 || DVCpara.NewFFTSearch==1
-        % ====== Integer Search ======
-        % DVCpara.InitFFTMethod = 'bigxcorr'; tic % fftmethod \in {'xcorr','phasecorr','bigphasecorr','bigxcorr'}
-        tic; [xyz0,uvw0,cc,SizeOfFFTSearchRegion] = IntegerSearch3Mg(Img,DVCpara); DVCpara.SizeOfFFTSearchRegion=SizeOfFFTSearchRegion; toc
-        % ======== Find some bad inital guess points ========
-        cc.ccThreshold=1.25; % bad cross-correlation threshold (mean - ccThreshold*stdev for q-factor distribution)
-        DVCpara.qDICOrNot=0; DVCpara.Thr0=0; [uvw,cc]=RemoveOutliers3(uvw0,cc,DVCpara.qDICOrNot,DVCpara.Thr0); %Last term is threshold value
+        
+        [xyz0_x,xyz0_y,xyz0_z] = ndgrid( [ max([4,DVCpara.gridRange.gridxRange(1)]) :  DVCpara.winstepsize(1)  :  min([DVCpara.ImgSize(1)-3,DVCpara.gridRange.gridxRange(2)])  ] , ...
+            [ max([4,DVCpara.gridRange.gridyRange(1)]) :  DVCpara.winstepsize(2)  :  min([DVCpara.ImgSize(2)-3,DVCpara.gridRange.gridyRange(2)])  ] , ...
+            [ max([4,DVCpara.gridRange.gridzRange(1)]) :  DVCpara.winstepsize(3)  :  min([DVCpara.ImgSize(3)-3,DVCpara.gridRange.gridzRange(2)])  ] );
+        
+        xyz0.x = xyz0_x; xyz0.y = xyz0_y; xyz0.z = xyz0_z;
+        
+        DVCpara.SizeOfFFTSearchRegion = 0; % Default
+        DVCpara.qDICOrNot=0; DVCpara.Thr0=0; % Default
+        
         % ====== FEM mesh set up ======
         [DVCmesh] = MeshSetUp3(xyz0,DVCpara);
+        
+        uvw.u = 3.568*ones(size(xyz0.x)); 
+        uvw.v = -2.751*ones(size(xyz0.x)); 
+        uvw.w = 0.1286*ones(size(xyz0.x)); 
+        
         % ====== Assign initial values ======
-        U0 = Init3(uvw,DVCmesh.xyz0); Plotdisp_show3(U0,DVCmesh.coordinatesFEM,DVCmesh.elementsFEM); 
-    
+        U0 = Init3(uvw,DVCmesh.xyz0); 
+        %%%%% Plotdisp_show3(U0,DVCmesh.coordinatesFEM,DVCmesh.elementsFEM); 
+          
+        
         % ====== Deal with incremental mode ======
         Img1NewIndex = ImgSeqNum-mod(ImgSeqNum-2,DVCpara.ImgSeqIncUnit)-1;
         if DVCpara.ImgSeqIncUnit==1, Img1NewIndex = Img1NewIndex-1; end
@@ -106,8 +117,7 @@ for ImgSeqNum = 2 %: length(ImgNormalized)
     disp('--- Start to compute image gradients ---');
     Df = funImgGradient3(Img{1},'stencil7'); Df.imgSize = size(Img{1}); % Compute image grayscale value gradients
     disp('--- Computing image gradients done ---');
-    % ====== Compute f(X)-g(x+u) ======
-    % PlotImgDiff(x0,y0,u,v,fNormalized,gNormalized); % Img grayscale value residual
+    
     fprintf('------------ Section 3 Done ------------ \n \n')
    
     
@@ -123,7 +133,7 @@ for ImgSeqNum = 2 %: length(ImgNormalized)
     % codes to tune the best value of the coefficient of the regularizer |grad u|^2):
     % 
     % %%%%% Uncomment the following line to tune the best value of alpha %%%%%%
-    alphaList = [ 1e-2,1e-1,1e0,1e1,1e2 ]*mean(DVCpara.winstepsize);
+    alphaList = [ 100 ]*mean(DVCpara.winstepsize);
     % Err1List = zeros(length(alphaList),1); Err2List=Err1List; 
     % UList = cell(length(alphaList),1); FList=UList;
     
@@ -205,9 +215,9 @@ DVCpara.PlotComponentEachOrAll = funParaInput('PlotComponentEachOrAll');
  
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ------ Start plotting part -----
-for ImgSeqNum = 2:length(ImgNormalized)
+for ImgSeqNum = 2 %:length(ImgNormalized)
     
-    disp(['Current image frame #: ', num2str(ImgSeqNum),'/',num2str(length(ImgNormalized))]);
+    % disp(['Current image frame #: ', num2str(ImgSeqNum),'/',num2str(length(ImgNormalized))]);
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     fNormalizedNewIndex = ImgSeqNum-mod(ImgSeqNum-2,DVCpara.ImgSeqIncUnit)-1;
@@ -284,10 +294,13 @@ for ImgSeqNum = 2:length(ImgNormalized)
     Plotdisp03(ULocal,DVCmesh.coordinatesFEM,DVCmesh.elementsFEM,DVCpara.PlotComponentEachOrAll);
      
     % ------ Plot strain ------
-    %Plotstrain_show3(FLocal,coordinatesFEM,elementsFEM);
-    Plotstrain03(full(FStraintemp),xyz0.x(1+Rad(1):M-Rad(1),1+Rad(2):N-Rad(2),1+Rad(3):L-Rad(3)), ...
-        xyz0.y(1+Rad(1):M-Rad(1),1+Rad(2):N-Rad(2),1+Rad(3):L-Rad(3)), ...
-        xyz0.z(1+Rad(1):M-Rad(1),1+Rad(2):N-Rad(2),1+Rad(3):L-Rad(3)),size(Img{1}),DVCpara.PlotComponentEachOrAll);
+    % %%%%% Or use this line %%%%%
+    Plotstrain_show3(FLocal,coordinatesFEM,elementsFEM);
+    
+    % %%%%% Or use this line %%%%%
+    % Plotstrain03(full(FStraintemp),xyz0.x(1+Rad(1):M-Rad(1),1+Rad(2):N-Rad(2),1+Rad(3):L-Rad(3)), ...
+    %     xyz0.y(1+Rad(1):M-Rad(1),1+Rad(2):N-Rad(2),1+Rad(3):L-Rad(3)), ...
+    %     xyz0.z(1+Rad(1):M-Rad(1),1+Rad(2):N-Rad(2),1+Rad(3):L-Rad(3)),size(Img{1}),DVCpara.PlotComponentEachOrAll);
     
     % ------ Store strain data ------
     ResultStrain{ImgSeqNum-1}.Strain = FStraintemp;
@@ -338,4 +351,23 @@ disp('Extensions for body and slice plottings'); pause;
 plotExt_bodyslice; % Feel free to modify this file (./PlotFiles/plotExt_bodyslice.m) on your purpose.
 
 
+%% %%%%%%%%%%%%% Extensions %%%%%%%%%%%%%%%%
+ 
+% ====== Compute f(X)-g(x+u) ======
+% Img grayscale value residual
+% tempx = DVCmesh.xyz0.x; tempy = DVCmesh.xyz0.y; tempz = DVCmesh.xyz0.z;
 
+PlotImgDiff3(DVCmesh.coordinatesFEM(:,1), DVCmesh.coordinatesFEM(:,2), ...
+    DVCmesh.coordinatesFEM(:,3), -ResultDisp{1,1}.U(1:3:end), ...
+    -ResultDisp{1,1}.U(2:3:end), -ResultDisp{1,1}.U(3:3:end), ...
+    Img{1}, Img{2});
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
